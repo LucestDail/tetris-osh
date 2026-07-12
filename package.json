@@ -1,0 +1,9 @@
+{
+  "name": "tetris-multiplayer",
+  "version": "2.0.0",
+  "description": "Serverless P2P multiplayer Tetris (Trystero + WebRTC). GitHub Pages 배포 가능.",
+  "scripts": {
+    "dev": "npx --yes serve public",
+    "start": "npx --yes serve public"
+  }
+}

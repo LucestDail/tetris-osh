@@ -1,0 +1,422 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #0d0d1a;
+  --panel: #12122a;
+  --border: #1e1e3f;
+  --accent: #6c63ff;
+  --accent2: #ff6584;
+  --text: #e0e0ff;
+  --muted: #6b6b9b;
+  --success: #43e97b;
+  --danger: #f5576c;
+  --cell-size: 28px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── SCREENS ── */
+.screen {
+  display: none;
+  width: 100%;
+  max-width: 1200px;
+  padding: 20px;
+}
+.screen.active { display: flex; }
+
+/* ── LOBBY ── */
+#lobby-screen {
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.logo {
+  font-size: 3rem;
+  font-weight: 900;
+  letter-spacing: 4px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.lobby-box {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  width: 100%;
+  max-width: 520px;
+}
+
+.lobby-box h2 {
+  margin-bottom: 16px;
+  font-size: 1rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.input-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+input[type="text"] {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: var(--text);
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+input[type="text"]:focus { border-color: var(--accent); }
+
+button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+  white-space: nowrap;
+}
+button:hover { opacity: 0.88; }
+button:active { transform: scale(0.97); }
+button.secondary {
+  background: var(--border);
+  color: var(--text);
+}
+button.danger { background: var(--danger); }
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.room-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.room-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  gap: 12px;
+}
+.room-item .room-info { flex: 1; }
+.room-item .room-id {
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--accent);
+}
+.room-item .room-meta {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.badge {
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  border-radius: 99px;
+  font-weight: 600;
+}
+.badge.playing { background: #ff6584aa; color: #ff6584; }
+.badge.waiting { background: #43e97b33; color: #43e97b; }
+
+.empty-state {
+  text-align: center;
+  padding: 24px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* ── WAITING ROOM ── */
+#waiting-screen {
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.room-header {
+  text-align: center;
+}
+.room-code {
+  font-size: 2.5rem;
+  font-weight: 900;
+  letter-spacing: 8px;
+  color: var(--accent);
+}
+.room-hint { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
+
+.player-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  width: 100%;
+  max-width: 600px;
+}
+.player-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+}
+.player-card .avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  margin: 0 auto 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+.player-card .p-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.player-card.me { border-color: var(--accent); }
+
+.waiting-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* ── GAME SCREEN ── */
+#game-screen {
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+}
+
+.game-layout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Main board area */
+.main-area {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 110px;
+}
+
+.panel-box {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.panel-box label {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.panel-box .val {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+#next-canvas {
+  display: block;
+}
+
+/* Main game canvas */
+#game-canvas {
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  image-rendering: pixelated;
+}
+
+/* Opponents area */
+.opponents-area {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  max-width: 420px;
+  align-content: flex-start;
+}
+
+.opponent-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.opponent-card:hover { border-color: var(--accent2); }
+.opponent-card.targeted { border-color: var(--accent2); box-shadow: 0 0 8px var(--accent2)44; }
+.opponent-card.dead { opacity: 0.35; cursor: default; }
+
+.opponent-card .opp-name {
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.opp-score {
+  font-size: 0.62rem;
+  color: var(--muted);
+}
+.target-arrow {
+  color: var(--accent2);
+  font-size: 0.75rem;
+}
+
+/* Overlays */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.overlay.active { display: flex; }
+
+.overlay-box {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 40px;
+  text-align: center;
+  max-width: 340px;
+  width: 90%;
+}
+.overlay-box h2 {
+  font-size: 2rem;
+  margin-bottom: 8px;
+}
+.overlay-box p {
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+.overlay-box .winner-name {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--success);
+  margin: 8px 0 20px;
+}
+.countdown-num {
+  font-size: 6rem;
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: pulse 0.8s ease-in-out;
+}
+@keyframes pulse {
+  0% { transform: scale(1.4); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Garbage warning */
+.garbage-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: var(--danger);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  z-index: 200;
+  transform: translateX(200%);
+  transition: transform 0.3s ease;
+}
+.garbage-toast.show { transform: translateX(0); }
+
+/* Target indicator */
+.target-label {
+  font-size: 0.72rem;
+  color: var(--accent2);
+  text-align: center;
+}
+
+/* Controls help */
+.controls-hint {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.8;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+@media (max-width: 700px) {
+  :root { --cell-size: 22px; }
+  .opponents-area { max-width: 100%; }
+  .game-layout { flex-direction: column; }
+}

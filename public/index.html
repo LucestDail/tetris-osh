@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TETRIS MULTI</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ── LOBBY ── -->
+<div id="lobby-screen" class="screen active">
+  <div class="logo">TETRI.S</div>
+  <p style="color: var(--muted); font-size: 0.9rem;">멀티플레이어 테트리스 · 최대 6인</p>
+
+  <div class="lobby-box">
+    <h2>플레이어 이름</h2>
+    <div class="input-row">
+      <input type="text" id="name-input" placeholder="닉네임 입력..." maxlength="12">
+    </div>
+
+    <button id="create-btn" style="width:100%">새 방 만들기</button>
+
+    <div class="divider">또는 방 코드로 참가</div>
+
+    <div class="input-row">
+      <input type="text" id="code-input" placeholder="방 코드 (6자리)" maxlength="6" style="text-transform:uppercase">
+      <button id="join-btn">참가</button>
+    </div>
+
+    <p style="color: var(--muted); font-size: 0.78rem; text-align:center; margin-top:14px; line-height:1.5;">
+      🔗 서버 없이 P2P(WebRTC)로 직접 연결됩니다.<br>
+      방장이 만든 6자리 코드를 친구에게 공유하세요.
+    </p>
+  </div>
+</div>
+
+<!-- ── WAITING ROOM ── -->
+<div id="waiting-screen" class="screen">
+  <div class="room-header">
+    <div style="color: var(--muted); font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase;">방 코드</div>
+    <div class="room-code" id="room-code-display"></div>
+    <div class="room-hint">친구에게 코드를 알려주세요</div>
+  </div>
+
+  <div id="waiting-player-list" class="player-list"></div>
+
+  <div class="waiting-actions">
+    <button id="start-btn">게임 시작</button>
+    <button id="leave-btn" class="secondary">나가기</button>
+  </div>
+
+  <div style="color: var(--muted); font-size: 0.8rem; text-align: center;">
+    최소 1명 / 최대 6명 · 방장만 시작 가능
+  </div>
+</div>
+
+<!-- ── GAME ── -->
+<div id="game-screen" class="screen">
+  <div class="game-layout">
+    <!-- Left panel -->
+    <div class="side-panel">
+      <div class="panel-box">
+        <label>점수</label>
+        <div class="val" id="score-display">0</div>
+      </div>
+      <div class="panel-box">
+        <label>레벨</label>
+        <div class="val" id="level-display">1</div>
+      </div>
+      <div class="panel-box">
+        <label>라인</label>
+        <div class="val" id="lines-display">0</div>
+      </div>
+      <div class="panel-box" id="target-panel" style="display:none">
+        <label>공격 대상</label>
+        <div class="target-label" id="target-name">-</div>
+      </div>
+    </div>
+
+    <!-- Main board -->
+    <div>
+      <canvas id="game-canvas"></canvas>
+    </div>
+
+    <!-- Right panel -->
+    <div class="side-panel">
+      <div class="panel-box">
+        <label>다음 블록</label>
+        <canvas id="next-canvas" width="80" height="80"></canvas>
+      </div>
+      <div class="panel-box">
+        <label>조작법</label>
+        <div class="controls-hint">
+          ← → 이동<br>
+          ↑ 회전<br>
+          ↓ 소프트드롭<br>
+          Space 하드드롭<br>
+          C 홀드<br>
+          클릭 대상 선택
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Opponents -->
+  <div id="opponents-area" class="opponents-area"></div>
+</div>
+
+<!-- ── OVERLAYS ── -->
+<div id="countdown-overlay" class="overlay">
+  <div class="overlay-box">
+    <div style="color: var(--muted); font-size: 1rem; margin-bottom: 12px;">게임 시작까지</div>
+    <div id="countdown-num" class="countdown-num">3</div>
+  </div>
+</div>
+
+<div id="gameover-overlay" class="overlay">
+  <div class="overlay-box">
+    <div style="font-size: 3rem;">💀</div>
+    <h2>게임 오버</h2>
+    <p>다른 플레이어들이 계속 플레이 중입니다</p>
+  </div>
+</div>
+
+<div id="result-overlay" class="overlay">
+  <div class="overlay-box">
+    <div id="result-emoji" style="font-size: 3rem;">🏆</div>
+    <h2 id="result-title">게임 종료</h2>
+    <div id="result-winner" class="winner-name"></div>
+    <div id="result-scores" style="margin-bottom: 20px; color: var(--muted); font-size: 0.85rem;"></div>
+    <button id="result-btn">로비로 돌아가기</button>
+  </div>
+</div>
+
+<div id="garbage-toast" class="garbage-toast"></div>
+
+<script type="module" src="game.js"></script>
+</body>
+</html>
