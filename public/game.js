@@ -1,9 +1,14 @@
 // Trystero P2P — Firebase 시그널링 전략 (0.21.x 클래식 API).
 // 공개 torrent/nostr/mqtt 릴레이는 rate-limit·트래커 사멸로 불안정하여
 // 무료 Firebase Realtime DB 를 시그널링 채널로 사용한다(서버 운영 불필요).
-// ?bundle 필수: esm.sh가 firebase 를 조각으로 서빙하면 database 서비스가
-// 등록되지 않아 "Service database is not available" 에러가 난다. 번들로 인라인.
-import { joinRoom, selfId } from 'https://esm.sh/trystero@0.21.5/firebase?bundle';
+//
+// 로컬 esbuild 번들 사용: esm.sh 런타임 번들은 재빌드/캐시로 불안정할 수 있어
+// firebase 를 로컬에 미리 번들해 저장소에 포함(vendor/). CDN 런타임 의존 제거.
+// 번들은 firebase 헬퍼(initializeApp/getDatabase/ref/onValue/onDisconnect)도 export.
+import {
+  joinRoom, selfId,
+  initializeApp, getDatabase, ref, onValue, set, onDisconnect,
+} from './vendor/trystero-firebase.js';
 
 // ═══════════════════════════════════════════════
 //  TETRIS ENGINE
@@ -577,6 +582,37 @@ function dbg(msg) {
   line.textContent = `${t}  ${msg}`;
   el.prepend(line);
 }
+// WebRTC 와 무관하게 "Firebase 시그널링(발견) 자체가 되는지"를 직접 검증한다.
+// 각 피어가 __diag/<room>/<selfId> 에 이름을 쓰고, 같은 경로를 구독한다.
+// 상대의 항목이 보이면 = 두 기기 사이 Firebase 실시간 동기화 정상(발견 OK).
+// 이게 뜨는데도 게임 연결이 안 되면 → 원인은 WebRTC/TURN(발견은 정상).
+let diagStarted = false;
+function startDiscoveryProbe(roomCode) {
+  if (!DEBUG || diagStarted) return;
+  diagStarted = true;
+  try {
+    const app = initializeApp({ databaseURL: FIREBASE_DB_URL }, 'diag');
+    const db = getDatabase(app);
+    const base = `__diag/${roomCode}`;
+    const mine = ref(db, `${base}/${mySocketId}`);
+    set(mine, { name: myName || (isHost ? 'host' : 'guest'), t: Date.now() });
+    onDisconnect(mine).remove();
+    const seen = new Set();
+    onValue(ref(db, base), (snap) => {
+      const val = snap.val() || {};
+      for (const id of Object.keys(val)) {
+        if (id !== mySocketId && !seen.has(id)) {
+          seen.add(id);
+          dbg(`🔎 [발견진단] 상대를 Firebase에서 감지: ${id.slice(0, 4)} (${val[id]?.name}) → 시그널링 정상`);
+        }
+      }
+    });
+    dbg('[발견진단] Firebase presence 감시 시작');
+  } catch (e) {
+    dbg('[발견진단] 실패: ' + String(e).slice(0, 60));
+  }
+}
+
 let dbgTimer = null;
 function startDbgMonitor() {
   if (!DEBUG || dbgTimer) return;
@@ -610,6 +646,7 @@ function setupRoom(roomCode, asHost) {
   dbg(`Firebase 연결 시도… room=${roomCode} host=${asHost} self=${mySocketId.slice(0, 4)} TURN=${TURN_SERVERS.length > 0}`);
   room = joinRoom({ appId: FIREBASE_DB_URL, turnConfig: TURN_SERVERS }, roomCode);
   startDbgMonitor();
+  startDiscoveryProbe(roomCode);
 
   // Trystero 0.21.x 클래식 API: makeAction 은 [send, get] 배열을 반환.
   const [aHello, onHello]     = room.makeAction('hello');
