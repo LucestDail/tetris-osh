@@ -140,6 +140,18 @@
 
 <div id="garbage-toast" class="garbage-toast"></div>
 
+<!-- ── 연결 진단 패널 (문제 해결용) ── -->
+<div id="debug-panel" style="position:fixed;left:6px;bottom:6px;z-index:9999;max-width:min(92vw,420px);
+  font:11px/1.45 ui-monospace,Menlo,monospace;color:#9fe;background:rgba(0,0,0,.82);
+  border:1px solid #2a2a44;border-radius:8px;padding:8px 10px;">
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
+    <b style="color:#6cf;">🔧 연결 진단</b>
+    <span id="debug-status" style="color:#ffd76a;">대기</span>
+    <button id="debug-close" style="margin-left:auto;font-size:10px;padding:2px 6px;">닫기</button>
+  </div>
+  <div id="debug-log" style="max-height:34vh;overflow:auto;color:#bcd;"></div>
+</div>
+
 <script type="module" src="game.js"></script>
 </body>
 </html>

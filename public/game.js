@@ -566,6 +566,33 @@ let sendHello, sendRoster, sendCountdown, sendStart, sendBoard, sendGarbage, sen
 let room = null;
 let joinTimeout = null;
 
+// ── 연결 진단 (문제 해결용) ──
+const DEBUG = true;
+function dbg(msg) {
+  if (!DEBUG) return;
+  const el = document.getElementById('debug-log');
+  if (!el) return;
+  const t = new Date().toTimeString().slice(0, 8);
+  const line = document.createElement('div');
+  line.textContent = `${t}  ${msg}`;
+  el.prepend(line);
+}
+let dbgTimer = null;
+function startDbgMonitor() {
+  if (!DEBUG || dbgTimer) return;
+  dbgTimer = setInterval(() => {
+    const st = document.getElementById('debug-status');
+    if (!st || !room || !room.getPeers) return;
+    let peers = {};
+    try { peers = room.getPeers() || {}; } catch { /* noop */ }
+    const ids = Object.keys(peers);
+    const states = ids.map(id => `${id.slice(0, 4)}:${peers[id]?.iceConnectionState || '?'}`);
+    st.textContent = ids.length
+      ? `peers=${ids.length} [${states.join(', ')}]`
+      : '피어 대기 중(아직 발견 안 됨)';
+  }, 1000);
+}
+
 function makePlayer(id, name) {
   return { id, name, board: null, score: 0, level: 1, lines: 0, alive: false };
 }
@@ -580,7 +607,9 @@ function randomCode() {
 function setupRoom(roomCode, asHost) {
   currentRoomId = roomCode;
   isHost = asHost;
+  dbg(`Firebase 연결 시도… room=${roomCode} host=${asHost} self=${mySocketId.slice(0, 4)} TURN=${TURN_SERVERS.length > 0}`);
   room = joinRoom({ appId: FIREBASE_DB_URL, turnConfig: TURN_SERVERS }, roomCode);
+  startDbgMonitor();
 
   // Trystero 0.21.x 클래식 API: makeAction 은 [send, get] 배열을 반환.
   const [aHello, onHello]     = room.makeAction('hello');
@@ -597,10 +626,12 @@ function setupRoom(roomCode, asHost) {
 
   // 새 피어가 붙으면 서로 인사. 호스트는 인사를 받아 로스터를 재전파한다.
   room.onPeerJoin((peerId) => {
+    dbg(`✅ 피어 발견(WebRTC 연결됨): ${peerId.slice(0, 4)}`);
     sendHello({ name: myName, host: isHost }, peerId);
   });
 
   onHello((data, peerId) => {
+    dbg(`hello 수신: ${data.name} (host=${data.host})`);
     peerNames.set(peerId, data.name);
     if (data.host) hostId = peerId;
     if (isHost) {
@@ -611,7 +642,7 @@ function setupRoom(roomCode, asHost) {
     }
   });
 
-  onRoster((data) => applyRoster(data.players));
+  onRoster((data) => { dbg(`roster 수신: ${data.players?.length}명 → 대기실 입장`); applyRoster(data.players); });
   onCount((data) => handleCountdown(data.count));
   onStart((data) => handleGameStart(data.players));
 
@@ -643,6 +674,7 @@ function setupRoom(roomCode, asHost) {
   onEnd((data) => handleGameEnd(data));
 
   room.onPeerLeave((peerId) => {
+    dbg(`피어 나감: ${peerId.slice(0, 4)}`);
     peerNames.delete(peerId);
     alivePeers.delete(peerId);
     removeOpponentCard(peerId);
@@ -703,7 +735,8 @@ function joinRoomByCode(code, name) {
   // 호스트의 로스터를 기다린다. 방이 없으면 타임아웃 처리.
   // TURN 중계 연결은 지연이 커서 여유를 둔다(너무 짧으면 정상 연결도 오인 실패).
   joinTimeout = setTimeout(() => {
-    alert('연결에 실패했습니다.\n· 방 코드가 맞는지\n· 방장이 아직 대기 중인지\n· (회사망 등) 네트워크 제한이 없는지\n확인 후 다시 시도해주세요.');
+    dbg('❌ 25초 타임아웃 — 위 로그로 어디서 막혔는지 확인하세요');
+    alert('연결에 실패했습니다.\n· 방 코드가 맞는지\n· 방장이 아직 대기 중인지\n· (회사망 등) 네트워크 제한이 없는지\n확인 후 다시 시도해주세요.\n\n(화면 좌하단 "연결 진단" 로그를 캡처해 주세요)');
     location.reload();
   }, 25000);
 }
@@ -1019,6 +1052,10 @@ document.getElementById('join-btn').addEventListener('click', () => {
   const code = document.getElementById('code-input').value.trim().toUpperCase();
   if (!code) { alert('방 코드를 입력해주세요!'); return; }
   joinRoomByCode(code, name);
+});
+
+document.getElementById('debug-close').addEventListener('click', () => {
+  document.getElementById('debug-panel').style.display = 'none';
 });
 
 document.getElementById('solo-btn').addEventListener('click', () => {
