@@ -582,6 +582,43 @@ function dbg(msg) {
   line.textContent = `${t}  ${msg}`;
   el.prepend(line);
 }
+// Trystero 의 getPeers() 는 "연결 완료된" 피어만 노출하므로, 협상/실패 과정을
+// 보려면 RTCPeerConnection 을 감싸서 후보 타입·ICE 상태 전이를 직접 로깅한다.
+let rtcPatched = false;
+function patchRTCForDebug() {
+  if (!DEBUG || rtcPatched || typeof window.RTCPeerConnection !== 'function') return;
+  rtcPatched = true;
+  const Orig = window.RTCPeerConnection;
+  const gotCand = new Set();   // 후보 타입 전역 dedupe (로그 폭주 방지)
+  let pcCount = 0, connectedLogged = false, failLogged = false;
+  function Patched(cfg) {
+    const pc = new Orig(cfg);
+    pcCount++;
+    if (pcCount <= 2) {
+      const hasTurn = JSON.stringify((cfg && cfg.iceServers) || []).includes('turn:');
+      dbg(`🔗 WebRTC 협상 시작 (TURN포함=${hasTurn})`);
+    } else if (pcCount === 4) {
+      dbg('🔁 협상 재시도 다수 — WebRTC 연결이 안 맺어지는 중');
+    }
+    pc.addEventListener('icecandidate', (e) => {
+      if (!e.candidate) return;
+      const t = (e.candidate.candidate.match(/ typ (\w+)/) || [])[1] || '?';
+      if (!gotCand.has(t)) { gotCand.add(t); dbg(`  후보 수집됨: ${t}`); }
+    });
+    pc.addEventListener('iceconnectionstatechange', () => {
+      const s = pc.iceConnectionState;
+      if ((s === 'connected' || s === 'completed') && !connectedLogged) {
+        connectedLogged = true; dbg(`  ✅ ICE 연결 성공 (${s})`);
+      } else if (s === 'failed' && !failLogged) {
+        failLogged = true; dbg('  ❌ ICE 연결 실패(failed)');
+      }
+    });
+    return pc;
+  }
+  Patched.prototype = Orig.prototype;
+  window.RTCPeerConnection = Patched;
+}
+
 // WebRTC 와 무관하게 "Firebase 시그널링(발견) 자체가 되는지"를 직접 검증한다.
 // 각 피어가 __diag/<room>/<selfId> 에 이름을 쓰고, 같은 경로를 구독한다.
 // 상대의 항목이 보이면 = 두 기기 사이 Firebase 실시간 동기화 정상(발견 OK).
@@ -644,6 +681,7 @@ function setupRoom(roomCode, asHost) {
   currentRoomId = roomCode;
   isHost = asHost;
   dbg(`Firebase 연결 시도… room=${roomCode} host=${asHost} self=${mySocketId.slice(0, 4)} TURN=${TURN_SERVERS.length > 0}`);
+  patchRTCForDebug();
   room = joinRoom({ appId: FIREBASE_DB_URL, turnConfig: TURN_SERVERS }, roomCode);
   startDbgMonitor();
   startDiscoveryProbe(roomCode);
