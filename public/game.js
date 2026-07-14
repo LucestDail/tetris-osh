@@ -565,7 +565,7 @@ let room = null;
 let joinTimeout = null;
 
 // ── 연결 진단 (문제 해결용) ──
-const DEBUG = true;
+const DEBUG = false;   // 연결 진단 패널 (문제 해결 시 true 로)
 const APP_VERSION = 'v9-2026-07-14';  // 배포마다 갱신 — 두 기기 버전 일치 확인용
 function dbg(msg) {
   if (!DEBUG) return;
