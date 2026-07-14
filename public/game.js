@@ -527,6 +527,27 @@ function clearTarget() {
 const FIREBASE_DB_URL = 'https://tetris-1cbf7-default-rtdb.firebaseio.com/';
 // ▲▲▲ 이 값을 바꾸지 않으면 멀티플레이 연결이 되지 않습니다 ▲▲▲
 
+// ── TURN 서버 (NAT 통과용) ──────────────────────────────────────
+// Trystero 는 기본 STUN 에 아래 turnConfig 를 "더해서" 사용한다.
+// 회사망·대칭 NAT·엄격한 방화벽 뒤 사용자끼리는 STUN 만으로 연결이 실패하므로
+// TURN(중계)이 필요하다.
+//
+// ⚠️ 과거의 무료 공개 서버(openrelay.metered.ca / openrelayproject)는 현재
+//    relay 후보를 전혀 주지 않아 무의미함(브라우저 ICE 수집으로 실측 확인).
+//    죽은 TURN 을 넣으면 ICE 완료가 지연될 수 있어 오히려 해롭다.
+//
+// ✅ 실제로 작동시키려면: https://dashboard.metered.ca 무료 계정(월 50GB) 생성 →
+//    "TURN Credentials" 의 username / password(credential) 를 아래에 채운다.
+//    비워두면 TURN 없이 STUN 만 사용한다(대부분의 가정용 NAT 는 STUN 으로 충분).
+const TURN_USERNAME   = 'f04f74ed68ea84c495df7fec';   // metered 대시보드 username
+const TURN_CREDENTIAL = '9qg6O1vVOat4vWYG';           // metered 대시보드 credential(password)
+const TURN_SERVERS = (TURN_USERNAME && TURN_CREDENTIAL) ? [
+  { urls: 'turn:global.relay.metered.ca:80',                  username: TURN_USERNAME, credential: TURN_CREDENTIAL },
+  { urls: 'turn:global.relay.metered.ca:80?transport=tcp',    username: TURN_USERNAME, credential: TURN_CREDENTIAL },
+  { urls: 'turn:global.relay.metered.ca:443',                 username: TURN_USERNAME, credential: TURN_CREDENTIAL },
+  { urls: 'turns:global.relay.metered.ca:443?transport=tcp',  username: TURN_USERNAME, credential: TURN_CREDENTIAL },
+] : [];
+
 const game = new TetrisGame();
 const mySocketId = selfId;      // Trystero 피어 ID (자기 자신)
 let isHost = false;
@@ -534,6 +555,7 @@ let currentRoomId = null;
 let hostId = null;
 let myName = '';
 let gameStarted = false;
+let soloMode = false;           // 솔로(1인 연습) 모드 여부
 
 const roster = new Map();       // 호스트 권한: id → player (전체 명단)
 const peerNames = new Map();    // id → name
@@ -558,7 +580,7 @@ function randomCode() {
 function setupRoom(roomCode, asHost) {
   currentRoomId = roomCode;
   isHost = asHost;
-  room = joinRoom({ appId: FIREBASE_DB_URL }, roomCode);
+  room = joinRoom({ appId: FIREBASE_DB_URL, turnConfig: TURN_SERVERS }, roomCode);
 
   // Trystero 0.21.x 클래식 API: makeAction 은 [send, get] 배열을 반환.
   const [aHello, onHello]     = room.makeAction('hello');
@@ -679,10 +701,11 @@ function joinRoomByCode(code, name) {
   isHost = false;
   setupRoom(code, false);
   // 호스트의 로스터를 기다린다. 방이 없으면 타임아웃 처리.
+  // TURN 중계 연결은 지연이 커서 여유를 둔다(너무 짧으면 정상 연결도 오인 실패).
   joinTimeout = setTimeout(() => {
-    alert('방을 찾을 수 없습니다. 코드를 확인해주세요. (또는 이미 게임이 진행 중)');
+    alert('연결에 실패했습니다.\n· 방 코드가 맞는지\n· 방장이 아직 대기 중인지\n· (회사망 등) 네트워크 제한이 없는지\n확인 후 다시 시도해주세요.');
     location.reload();
-  }, 12000);
+  }, 25000);
 }
 
 // ── 카운트다운 / 시작 (호스트가 구동) ──
@@ -805,6 +828,41 @@ function handleGameEnd({ winnerId, winnerName, players }) {
     .map((p, i) => `${i + 1}. ${escapeHtml(p.name)} — ${p.score.toLocaleString()}점`)
     .join('<br>');
 
+  document.getElementById('retry-btn').style.display = 'none'; // 재도전은 솔로 전용
+  showOverlay('result-overlay');
+}
+
+// ═══════════════════════════════════════════════
+//  SOLO MODE (1인 연습 — 네트워크 없음)
+// ═══════════════════════════════════════════════
+
+function startSoloGame() {
+  soloMode = true;
+  gameStarted = true;
+  hideAllOverlays();
+  clearOpponents();
+  clearTarget();
+  showScreen('game-screen');
+  game.start();
+
+  game.onUpdate = () => render(game);
+  game.onLinesCleared = () => {};   // 솔로에는 공격 없음
+  game.onGameOver = () => {
+    gameStarted = false;
+    game.stop();
+    stopRenderLoop();
+    showSoloResult();
+  };
+
+  startRenderLoop();
+}
+
+function showSoloResult() {
+  document.getElementById('result-emoji').textContent = '🎮';
+  document.getElementById('result-title').textContent = '게임 오버';
+  document.getElementById('result-winner').textContent = `최종 점수 ${game.score.toLocaleString()}점`;
+  document.getElementById('result-scores').innerHTML = `레벨 ${game.level} · ${game.lines}줄 클리어`;
+  document.getElementById('retry-btn').style.display = 'inline-block';
   showOverlay('result-overlay');
 }
 
@@ -961,6 +1019,15 @@ document.getElementById('join-btn').addEventListener('click', () => {
   const code = document.getElementById('code-input').value.trim().toUpperCase();
   if (!code) { alert('방 코드를 입력해주세요!'); return; }
   joinRoomByCode(code, name);
+});
+
+document.getElementById('solo-btn').addEventListener('click', () => {
+  startSoloGame();
+});
+
+document.getElementById('retry-btn').addEventListener('click', () => {
+  hideAllOverlays();
+  startSoloGame();
 });
 
 document.getElementById('start-btn').addEventListener('click', () => {
