@@ -573,6 +573,7 @@ let joinTimeout = null;
 
 // ── 연결 진단 (문제 해결용) ──
 const DEBUG = true;
+const APP_VERSION = 'v8-2026-07-14';  // 배포마다 갱신 — 두 기기 버전 일치 확인용
 function dbg(msg) {
   if (!DEBUG) return;
   const el = document.getElementById('debug-log');
@@ -613,6 +614,17 @@ function patchRTCForDebug() {
         failLogged = true; dbg('  ❌ ICE 연결 실패(failed)');
       }
     });
+    // 데이터채널이 실제로 열리는지 = 진짜 연결 완료 여부
+    const origCreate = pc.createDataChannel.bind(pc);
+    pc.createDataChannel = (...a) => {
+      const dc = origCreate(...a);
+      dc.addEventListener('open', () => dbg('  📡 데이터채널 열림 → 연결 완료!'));
+      dc.addEventListener('error', () => dbg('  📡 데이터채널 에러'));
+      return dc;
+    };
+    pc.addEventListener('datachannel', (e) => {
+      e.channel.addEventListener('open', () => dbg('  📡 데이터채널(수신) 열림 → 연결 완료!'));
+    });
     return pc;
   }
   Patched.prototype = Orig.prototype;
@@ -632,7 +644,7 @@ function startDiscoveryProbe(roomCode) {
     const db = getDatabase(app);
     const base = `__diag/${roomCode}`;
     const mine = ref(db, `${base}/${mySocketId}`);
-    set(mine, { name: myName || (isHost ? 'host' : 'guest'), t: Date.now() });
+    set(mine, { name: myName || (isHost ? 'host' : 'guest'), t: Date.now(), v: APP_VERSION });
     onDisconnect(mine).remove();
     const seen = new Set();
     onValue(ref(db, base), (snap) => {
@@ -640,7 +652,9 @@ function startDiscoveryProbe(roomCode) {
       for (const id of Object.keys(val)) {
         if (id !== mySocketId && !seen.has(id)) {
           seen.add(id);
-          dbg(`🔎 [발견진단] 상대를 Firebase에서 감지: ${id.slice(0, 4)} (${val[id]?.name}) → 시그널링 정상`);
+          const pv = val[id]?.v || '?';
+          const vmatch = pv === APP_VERSION ? '버전일치✅' : `⚠️버전다름(상대=${pv})`;
+          dbg(`🔎 [발견진단] 상대 감지: ${id.slice(0, 4)} (${val[id]?.name}) 시그널링정상 · ${vmatch}`);
         }
       }
     });
@@ -680,7 +694,7 @@ function randomCode() {
 function setupRoom(roomCode, asHost) {
   currentRoomId = roomCode;
   isHost = asHost;
-  dbg(`Firebase 연결 시도… room=${roomCode} host=${asHost} self=${mySocketId.slice(0, 4)} TURN=${TURN_SERVERS.length > 0}`);
+  dbg(`[${APP_VERSION}] Firebase 연결… room=${roomCode} host=${asHost} self=${mySocketId.slice(0, 4)} TURN=${TURN_SERVERS.length > 0}`);
   patchRTCForDebug();
   room = joinRoom({ appId: FIREBASE_DB_URL, turnConfig: TURN_SERVERS }, roomCode);
   startDbgMonitor();
