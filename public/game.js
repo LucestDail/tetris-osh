@@ -1,14 +1,7 @@
-// Trystero P2P — Firebase 시그널링 전략 (0.21.x 클래식 API).
-// 공개 torrent/nostr/mqtt 릴레이는 rate-limit·트래커 사멸로 불안정하여
-// 무료 Firebase Realtime DB 를 시그널링 채널로 사용한다(서버 운영 불필요).
-//
-// 로컬 esbuild 번들 사용: esm.sh 런타임 번들은 재빌드/캐시로 불안정할 수 있어
-// firebase 를 로컬에 미리 번들해 저장소에 포함(vendor/). CDN 런타임 의존 제거.
-// 번들은 firebase 헬퍼(initializeApp/getDatabase/ref/onValue/onDisconnect)도 export.
-import {
-  joinRoom, selfId,
-  initializeApp, getDatabase, ref, onValue, set, onDisconnect,
-} from './vendor/trystero-firebase.js';
+// P2P 시그널링 — Firebase Realtime DB 로 직접 구현(Trystero 대체).
+// Trystero 는 이 환경에서 연결 협상이 재시도 폭주·데이터채널 미개통으로 실패해서
+// 글레어 없는 결정적 단일 연결로 직접 구현했다(p2p.js). Trystero 호환 API 유지.
+import { joinRoom, selfId } from './p2p.js';
 
 // ═══════════════════════════════════════════════
 //  TETRIS ENGINE
@@ -573,7 +566,7 @@ let joinTimeout = null;
 
 // ── 연결 진단 (문제 해결용) ──
 const DEBUG = true;
-const APP_VERSION = 'v8-2026-07-14';  // 배포마다 갱신 — 두 기기 버전 일치 확인용
+const APP_VERSION = 'v9-2026-07-14';  // 배포마다 갱신 — 두 기기 버전 일치 확인용
 function dbg(msg) {
   if (!DEBUG) return;
   const el = document.getElementById('debug-log');
@@ -583,87 +576,6 @@ function dbg(msg) {
   line.textContent = `${t}  ${msg}`;
   el.prepend(line);
 }
-// Trystero 의 getPeers() 는 "연결 완료된" 피어만 노출하므로, 협상/실패 과정을
-// 보려면 RTCPeerConnection 을 감싸서 후보 타입·ICE 상태 전이를 직접 로깅한다.
-let rtcPatched = false;
-function patchRTCForDebug() {
-  if (!DEBUG || rtcPatched || typeof window.RTCPeerConnection !== 'function') return;
-  rtcPatched = true;
-  const Orig = window.RTCPeerConnection;
-  const gotCand = new Set();   // 후보 타입 전역 dedupe (로그 폭주 방지)
-  let pcCount = 0, connectedLogged = false, failLogged = false;
-  function Patched(cfg) {
-    const pc = new Orig(cfg);
-    pcCount++;
-    if (pcCount <= 2) {
-      const hasTurn = JSON.stringify((cfg && cfg.iceServers) || []).includes('turn:');
-      dbg(`🔗 WebRTC 협상 시작 (TURN포함=${hasTurn})`);
-    } else if (pcCount === 4) {
-      dbg('🔁 협상 재시도 다수 — WebRTC 연결이 안 맺어지는 중');
-    }
-    pc.addEventListener('icecandidate', (e) => {
-      if (!e.candidate) return;
-      const t = (e.candidate.candidate.match(/ typ (\w+)/) || [])[1] || '?';
-      if (!gotCand.has(t)) { gotCand.add(t); dbg(`  후보 수집됨: ${t}`); }
-    });
-    pc.addEventListener('iceconnectionstatechange', () => {
-      const s = pc.iceConnectionState;
-      if ((s === 'connected' || s === 'completed') && !connectedLogged) {
-        connectedLogged = true; dbg(`  ✅ ICE 연결 성공 (${s})`);
-      } else if (s === 'failed' && !failLogged) {
-        failLogged = true; dbg('  ❌ ICE 연결 실패(failed)');
-      }
-    });
-    // 데이터채널이 실제로 열리는지 = 진짜 연결 완료 여부
-    const origCreate = pc.createDataChannel.bind(pc);
-    pc.createDataChannel = (...a) => {
-      const dc = origCreate(...a);
-      dc.addEventListener('open', () => dbg('  📡 데이터채널 열림 → 연결 완료!'));
-      dc.addEventListener('error', () => dbg('  📡 데이터채널 에러'));
-      return dc;
-    };
-    pc.addEventListener('datachannel', (e) => {
-      e.channel.addEventListener('open', () => dbg('  📡 데이터채널(수신) 열림 → 연결 완료!'));
-    });
-    return pc;
-  }
-  Patched.prototype = Orig.prototype;
-  window.RTCPeerConnection = Patched;
-}
-
-// WebRTC 와 무관하게 "Firebase 시그널링(발견) 자체가 되는지"를 직접 검증한다.
-// 각 피어가 __diag/<room>/<selfId> 에 이름을 쓰고, 같은 경로를 구독한다.
-// 상대의 항목이 보이면 = 두 기기 사이 Firebase 실시간 동기화 정상(발견 OK).
-// 이게 뜨는데도 게임 연결이 안 되면 → 원인은 WebRTC/TURN(발견은 정상).
-let diagStarted = false;
-function startDiscoveryProbe(roomCode) {
-  if (!DEBUG || diagStarted) return;
-  diagStarted = true;
-  try {
-    const app = initializeApp({ databaseURL: FIREBASE_DB_URL }, 'diag');
-    const db = getDatabase(app);
-    const base = `__diag/${roomCode}`;
-    const mine = ref(db, `${base}/${mySocketId}`);
-    set(mine, { name: myName || (isHost ? 'host' : 'guest'), t: Date.now(), v: APP_VERSION });
-    onDisconnect(mine).remove();
-    const seen = new Set();
-    onValue(ref(db, base), (snap) => {
-      const val = snap.val() || {};
-      for (const id of Object.keys(val)) {
-        if (id !== mySocketId && !seen.has(id)) {
-          seen.add(id);
-          const pv = val[id]?.v || '?';
-          const vmatch = pv === APP_VERSION ? '버전일치✅' : `⚠️버전다름(상대=${pv})`;
-          dbg(`🔎 [발견진단] 상대 감지: ${id.slice(0, 4)} (${val[id]?.name}) 시그널링정상 · ${vmatch}`);
-        }
-      }
-    });
-    dbg('[발견진단] Firebase presence 감시 시작');
-  } catch (e) {
-    dbg('[발견진단] 실패: ' + String(e).slice(0, 60));
-  }
-}
-
 let dbgTimer = null;
 function startDbgMonitor() {
   if (!DEBUG || dbgTimer) return;
@@ -694,11 +606,9 @@ function randomCode() {
 function setupRoom(roomCode, asHost) {
   currentRoomId = roomCode;
   isHost = asHost;
-  dbg(`[${APP_VERSION}] Firebase 연결… room=${roomCode} host=${asHost} self=${mySocketId.slice(0, 4)} TURN=${TURN_SERVERS.length > 0}`);
-  patchRTCForDebug();
-  room = joinRoom({ appId: FIREBASE_DB_URL, turnConfig: TURN_SERVERS }, roomCode);
+  dbg(`[${APP_VERSION}] room=${roomCode} host=${asHost} self=${mySocketId.slice(0, 4)} TURN=${TURN_SERVERS.length > 0}`);
+  room = joinRoom({ appId: FIREBASE_DB_URL, turnConfig: TURN_SERVERS, log: dbg }, roomCode);
   startDbgMonitor();
-  startDiscoveryProbe(roomCode);
 
   // Trystero 0.21.x 클래식 API: makeAction 은 [send, get] 배열을 반환.
   const [aHello, onHello]     = room.makeAction('hello');

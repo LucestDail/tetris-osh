@@ -4,7 +4,8 @@
 
 ## 동작 원리
 
-- **[Trystero](https://github.com/dmotz/trystero)** (0.21.5, firebase 전략)로 시그널링을 처리하고, 이후 데이터는 피어 간 WebRTC 데이터채널로 직접 오갑니다.
+- **직접 구현한 WebRTC 시그널링**(`public/p2p.js`)이 Firebase Realtime DB 로 offer/answer/ICE 후보를 교환하고, 이후 데이터는 피어 간 WebRTC 데이터채널로 직접 오갑니다.
+  - 과거 [Trystero](https://github.com/dmotz/trystero) 를 썼으나 이 환경에서 연결 협상이 재시도 폭주·데이터채널 미개통으로 실패해, **글레어 없는 결정적 단일 연결**(두 피어 중 id 작은 쪽이 offer)로 직접 구현해 교체했습니다. Firebase 는 `public/vendor/firebase.js` 로 로컬 번들.
 - 방장(방 생성자)이 **호스트 권한**을 갖고 로스터 관리 · 카운트다운 · 승자 판정을 담당합니다.
 - 보드 상태 갱신과 공격 라인(쓰레기 줄)은 **피어끼리 직접** 주고받습니다.
 - 방코드 = Trystero roomId. 방장이 만든 6자리 코드를 공유해 참가합니다.
