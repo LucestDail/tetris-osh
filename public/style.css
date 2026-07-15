@@ -424,35 +424,68 @@ button.danger { background: var(--danger); }
 /* ── 모바일 터치 컨트롤 ── (터치 기기에서만 노출; 데스크톱/키보드엔 영향 없음) */
 .touch-controls { display: none; }
 
+/* ═══ 모바일/터치 레이아웃 ═══ (pointer:coarse = 터치 기기에서만 적용) */
 @media (pointer: coarse) {
+  /* 위에서부터 배치(세로 중앙정렬 해제) */
+  body { align-items: flex-start; }
+  .screen { padding: 8px; }
+
+  /* 게임 화면: 세로 정렬 + 하단 고정 컨트롤 공간 확보 */
+  #game-screen.active { flex-direction: column; align-items: center; padding-bottom: 138px; }
+  .game-layout { flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+
+  /* 점수/레벨/라인/타겟, 다음블록 → 가로 컴팩트 바 (세로 공간 절약) */
+  .side-panel { flex-direction: row; flex-wrap: wrap; justify-content: center; width: 100%; gap: 6px; }
+  .panel-box { padding: 5px 12px; text-align: center; }
+  .panel-box label { font-size: 0.5rem; margin-bottom: 1px; letter-spacing: 0.5px; }
+  .panel-box .val { font-size: 1.05rem; }
+  #next-canvas { width: 44px; height: 44px; }
+
+  /* 보드를 화면 높이에 맞춰 스케일 (스탯+다음블록+고정컨트롤 공간 확보) */
+  #game-canvas {
+    width: auto;
+    height: auto;
+    max-width: 82vw;
+    max-height: calc(100vh - 300px);
+    max-height: calc(100dvh - 300px);
+  }
+
+  .opponents-area { justify-content: center; }
+
+  /* 조작 버튼: 화면 하단 고정 → 스크롤과 무관하게 항상 손에 닿음 */
   .touch-controls {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: 10px;
+    gap: 8px;
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
     width: 100%;
-    max-width: 460px;
-    margin: 16px auto 4px;
-    /* iOS 안전영역 하단 여백 */
-    padding-bottom: env(safe-area-inset-bottom, 0);
+    margin: 0;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0));
+    background: rgba(13, 13, 26, 0.96);
+    border-top: 1px solid var(--border);
+    z-index: 50;   /* 오버레이(z-index 100)보다 아래 → 결과/카운트다운 가림 없음 */
   }
   .tc-btn {
-    flex: 1 1 64px;
-    min-width: 64px;
-    height: 60px;
-    font-size: 1.5rem;
+    flex: 1 1 58px;
+    min-width: 58px;
+    height: 52px;
+    font-size: 1.4rem;
     font-weight: 700;
     color: var(--text);
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 14px;
+    border-radius: 12px;
     touch-action: none;          /* 스크롤/더블탭 확대 방지 */
     user-select: none;
     -webkit-user-select: none;
     -webkit-tap-highlight-color: transparent;
   }
-  .tc-btn.tc-drop { flex: 1 1 100%; font-size: 1.2rem; color: var(--accent2); }
+  .tc-btn.tc-drop { flex: 1 1 100%; height: 44px; font-size: 1.1rem; color: var(--accent2); }
+  .tc-btn[data-act="hold"] { font-size: 0.8rem; }   /* 글자 버튼은 작게 → 잘림 방지 */
   .tc-btn.active { background: var(--accent); color: #fff; }
-  /* 키보드 조작 안내는 터치 기기에서 숨김 */
+  /* 키보드 조작 안내 박스는 터치 기기에서 통째로 숨김 */
+  .panel-box:has(.controls-hint) { display: none; }
   .controls-hint { display: none; }
 }
