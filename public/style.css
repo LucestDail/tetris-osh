@@ -420,3 +420,39 @@ button.danger { background: var(--danger); }
   .opponents-area { max-width: 100%; }
   .game-layout { flex-direction: column; }
 }
+
+/* ── 모바일 터치 컨트롤 ── (터치 기기에서만 노출; 데스크톱/키보드엔 영향 없음) */
+.touch-controls { display: none; }
+
+@media (pointer: coarse) {
+  .touch-controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    max-width: 460px;
+    margin: 16px auto 4px;
+    /* iOS 안전영역 하단 여백 */
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  .tc-btn {
+    flex: 1 1 64px;
+    min-width: 64px;
+    height: 60px;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    touch-action: none;          /* 스크롤/더블탭 확대 방지 */
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tc-btn.tc-drop { flex: 1 1 100%; font-size: 1.2rem; color: var(--accent2); }
+  .tc-btn.active { background: var(--accent); color: #fff; }
+  /* 키보드 조작 안내는 터치 기기에서 숨김 */
+  .controls-hint { display: none; }
+}

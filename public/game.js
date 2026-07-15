@@ -558,6 +558,8 @@ let soloMode = false;           // 솔로(1인 연습) 모드 여부
 const roster = new Map();       // 호스트 권한: id → player (전체 명단)
 const peerNames = new Map();    // id → name
 const alivePeers = new Set();   // 이번 게임에서 살아있는 id들
+let lastRoster = [];            // 마지막으로 받은 로스터 스냅샷 (호스트 마이그레이션용)
+const peerStats = new Map();    // id → {score,level,lines} (마이그레이션 시 점수 복원)
 
 // 액션 송신 함수 (setupRoom에서 할당)
 let sendHello, sendRoster, sendCountdown, sendStart, sendBoard, sendGarbage, sendDied, sendGameEnd;
@@ -566,7 +568,7 @@ let joinTimeout = null;
 
 // ── 연결 진단 (문제 해결용) ──
 const DEBUG = false;   // 연결 진단 패널 (문제 해결 시 true 로)
-const APP_VERSION = 'v9-2026-07-14';  // 배포마다 갱신 — 두 기기 버전 일치 확인용
+const APP_VERSION = 'v10-2026-07-15'; // 배포마다 갱신 — 두 기기 버전 일치 확인용
 function dbg(msg) {
   if (!DEBUG) return;
   const el = document.getElementById('debug-log');
@@ -647,6 +649,7 @@ function setupRoom(roomCode, asHost) {
 
   onBoard((data, peerId) => {
     updateOpponentCard(peerId, data.board, data.score, alivePeers.has(peerId));
+    peerStats.set(peerId, { score: data.score, level: data.level, lines: data.lines });
     if (isHost) {
       const p = roster.get(peerId);
       if (p) { p.score = data.score; p.level = data.level; p.lines = data.lines; }
@@ -674,20 +677,92 @@ function setupRoom(roomCode, asHost) {
 
   room.onPeerLeave((peerId) => {
     dbg(`피어 나감: ${peerId.slice(0, 4)}`);
+    const wasHost = (peerId === hostId);
     peerNames.delete(peerId);
     alivePeers.delete(peerId);
+    peerStats.delete(peerId);
     removeOpponentCard(peerId);
-    if (peerId === hostId && !isHost) {
-      alert('방장이 나갔습니다. 로비로 돌아갑니다.');
-      location.reload();
-      return;
-    }
+
     if (isHost) {
+      // 내가 방장: 명단에서 제거 후 갱신/판정
       roster.delete(peerId);
       if (currentScreen() === 'waiting-screen') broadcastRoster();
       if (gameStarted) hostCheckGameEnd();
+    } else if (wasHost) {
+      // 방장이 나감 → 호스트 마이그레이션(결정적으로 새 방장 선출)
+      const newHost = pickNewHost(peerId);
+      if (!newHost) { location.reload(); return; }   // 아무도 안 남음
+      if (newHost === mySocketId) {
+        becomeHost(peerId);
+      } else {
+        hostId = newHost;
+        dbg(`새 방장 대기: ${newHost.slice(0, 4)}`);
+      }
     }
   });
+}
+
+// ── 호스트 마이그레이션 ──
+// 현재 방에 남아있는 멤버(자신 + 연결된 피어) 집합.
+function presentMembers() {
+  const ids = new Set([mySocketId]);
+  if (room && room.getPeers) {
+    for (const id of Object.keys(room.getPeers())) ids.add(id);
+  }
+  return ids;
+}
+
+// 새 방장을 결정적으로 선출한다(모든 피어가 동일 결과를 계산해야 함).
+// 기준: 마지막 로스터 순서에서 아직 남아있는 첫 멤버, 없으면 id 정렬 최소.
+function pickNewHost(departedHostId) {
+  const present = presentMembers();
+  present.delete(departedHostId);
+  const ordered = [];
+  for (const p of lastRoster) {
+    if (present.has(p.id) && !ordered.includes(p.id)) ordered.push(p.id);
+  }
+  const rest = [...present].filter(id => !ordered.includes(id)).sort();
+  return [...ordered, ...rest][0] ?? null;
+}
+
+// 내가 새 방장이 된다: 로스터를 재구성하고 권한을 인수한다.
+function becomeHost(departedHostId) {
+  isHost = true;
+  hostId = mySocketId;
+  const present = presentMembers();
+  present.delete(departedHostId);
+
+  // 순서: 새 방장(나)을 [0]으로, 이후 이전 로스터 순서 유지.
+  const orderedIds = [mySocketId];
+  for (const p of lastRoster) {
+    if (p.id !== mySocketId && present.has(p.id) && !orderedIds.includes(p.id)) orderedIds.push(p.id);
+  }
+  for (const id of present) if (!orderedIds.includes(id)) orderedIds.push(id);
+
+  roster.clear();
+  for (const id of orderedIds) {
+    const prev = lastRoster.find(p => p.id === id);
+    const name = (id === mySocketId ? myName : (peerNames.get(id) || prev?.name)) || '플레이어';
+    const pl = makePlayer(id, name);
+    if (gameStarted) {
+      pl.alive = alivePeers.has(id);
+      const st = id === mySocketId
+        ? { score: game.score, level: game.level, lines: game.lines }
+        : peerStats.get(id);
+      if (st) { pl.score = st.score; pl.level = st.level; pl.lines = st.lines; }
+    }
+    roster.set(id, pl);
+  }
+
+  dbg('👑 내가 새 방장이 됨');
+  if (currentScreen() === 'waiting-screen') {
+    document.getElementById('start-btn').textContent = '게임 시작';
+    document.getElementById('start-btn').disabled = false;
+    broadcastRoster();
+  } else if (gameStarted) {
+    broadcastRoster();
+    hostCheckGameEnd();   // 방장 이탈로 승부가 이미 갈렸으면 종료 처리
+  }
 }
 
 // ── 로스터 (호스트 권한) ──
@@ -699,6 +774,7 @@ function broadcastRoster() {
 
 function applyRoster(players) {
   hostId = players[0]?.id ?? hostId;
+  lastRoster = players;
   for (const p of players) peerNames.set(p.id, p.name);
 
   if (currentScreen() === 'lobby-screen') {
@@ -771,6 +847,7 @@ function hostStartGame() {
 
 function handleGameStart(players) {
   gameStarted = true;
+  lastRoster = players;
   hideAllOverlays();
   clearOpponents();
   clearTarget();
@@ -979,6 +1056,52 @@ document.addEventListener('keyup', (e) => {
     clearInterval(arrTimer);
   }
 });
+
+// ── 모바일 터치 컨트롤 (키보드와 독립; 동일 게임 메서드 재사용) ──
+function setupTouchControls() {
+  const tc = document.getElementById('touch-controls');
+  if (!tc) return;
+  const actions = {
+    left: () => game.move(-1),
+    right: () => game.move(1),
+    rotate: () => game.rotate(1),
+    soft: () => game.softDrop(),
+    hard: () => game.hardDrop(),
+    hold: () => game.holdPiece(),
+  };
+  const repeatable = new Set(['left', 'right', 'soft']);
+  let holdTimer = null, repTimer = null;
+  const stopRepeat = () => { clearTimeout(holdTimer); clearInterval(repTimer); holdTimer = repTimer = null; };
+
+  tc.querySelectorAll('.tc-btn').forEach((btn) => {
+    const act = btn.dataset.act;
+    const fn = actions[act];
+    if (!fn) return;
+
+    const press = (e) => {
+      e.preventDefault();
+      btn.classList.add('active');
+      if (!game.running) return;
+      fn();
+      if (repeatable.has(act)) {
+        stopRepeat();
+        holdTimer = setTimeout(() => { repTimer = setInterval(fn, ARR); }, DAS);
+      }
+    };
+    const release = (e) => {
+      if (e) e.preventDefault();
+      btn.classList.remove('active');
+      if (repeatable.has(act)) stopRepeat();
+    };
+
+    btn.addEventListener('pointerdown', press);
+    btn.addEventListener('pointerup', release);
+    btn.addEventListener('pointercancel', release);
+    btn.addEventListener('pointerleave', release);
+    btn.addEventListener('contextmenu', (e) => e.preventDefault()); // 롱프레스 메뉴 방지
+  });
+}
+setupTouchControls();
 
 // ═══════════════════════════════════════════════
 //  UI HELPERS
