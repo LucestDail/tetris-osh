@@ -1,0 +1,8 @@
+{
+  "rules": {
+    "p2p": {
+      ".read": true,
+      ".write": true
+    }
+  }
+}
