@@ -818,6 +818,7 @@ function joinRoomByCode(code, name) {
 
 // ── 카운트다운 / 시작 (호스트가 구동) ──
 function handleCountdown(count) {
+  hideAllOverlays();   // 다시하기: 결과 오버레이가 떠 있을 수 있으므로 정리
   showOverlay('countdown-overlay');
   const el = document.getElementById('countdown-num');
   el.textContent = count;
@@ -938,6 +939,9 @@ function handleGameEnd({ winnerId, winnerName, players }) {
     .join('<br>');
 
   document.getElementById('retry-btn').style.display = 'none'; // 재도전은 솔로 전용
+  // 다시하기: 방을 다시 만들 필요 없이 현재 방 그대로 재시작. 방장만 시작 가능.
+  document.getElementById('rematch-btn').style.display = isHost ? 'inline-block' : 'none';
+  document.getElementById('rematch-note').style.display = isHost ? 'none' : 'block';
   showOverlay('result-overlay');
 }
 
@@ -972,6 +976,8 @@ function showSoloResult() {
   document.getElementById('result-winner').textContent = `최종 점수 ${game.score.toLocaleString()}점`;
   document.getElementById('result-scores').innerHTML = `레벨 ${game.level} · ${game.lines}줄 클리어`;
   document.getElementById('retry-btn').style.display = 'inline-block';
+  document.getElementById('rematch-btn').style.display = 'none';
+  document.getElementById('rematch-note').style.display = 'none';
   showOverlay('result-overlay');
 }
 
@@ -1190,6 +1196,12 @@ document.getElementById('retry-btn').addEventListener('click', () => {
 });
 
 document.getElementById('start-btn').addEventListener('click', () => {
+  if (!isHost) return;
+  hostStartGame();
+});
+
+// 다시하기: 방 재생성 없이 현재 방 그대로 재대결. 방장이 누르면 전원 카운트다운 후 재시작.
+document.getElementById('rematch-btn').addEventListener('click', () => {
   if (!isHost) return;
   hostStartGame();
 });
